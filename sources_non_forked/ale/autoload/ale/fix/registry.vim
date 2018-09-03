@@ -22,6 +22,11 @@ let s:default_registry = {
 \       'suggested_filetypes': ['python'],
 \       'description': 'Fix PEP8 issues with black.',
 \   },
+\   'tidy': {
+\       'function': 'ale#fixers#tidy#Fix',
+\       'suggested_filetypes': ['html'],
+\       'description': 'Fix HTML files with tidy.',
+\   },
 \   'prettier_standard': {
 \       'function': 'ale#fixers#prettier_standard#Fix',
 \       'suggested_filetypes': ['javascript'],
@@ -51,7 +56,7 @@ let s:default_registry = {
 \   },
 \   'prettier': {
 \       'function': 'ale#fixers#prettier#Fix',
-\       'suggested_filetypes': ['javascript', 'typescript', 'json', 'css', 'scss', 'less', 'markdown', 'graphql', 'vue'],
+\       'suggested_filetypes': ['javascript', 'typescript', 'css', 'less', 'scss', 'json', 'json5', 'graphql', 'markdown', 'vue'],
 \       'description': 'Apply prettier to a file.',
 \   },
 \   'prettier_eslint': {
@@ -152,7 +157,7 @@ let s:default_registry = {
 \   },
 \   'hackfmt': {
 \       'function': 'ale#fixers#hackfmt#Fix',
-\       'suggested_filetypes': ['php'],
+\       'suggested_filetypes': ['hack'],
 \       'description': 'Fix Hack files with hackfmt.',
 \   },
 \   'hfmt': {
@@ -164,6 +169,16 @@ let s:default_registry = {
 \       'function': 'ale#fixers#brittany#Fix',
 \       'suggested_filetypes': ['haskell'],
 \       'description': 'Fix Haskell files with brittany.',
+\   },
+\   'hlint': {
+\       'function': 'ale#fixers#hlint#Fix',
+\       'suggested_filetypes': ['haskell'],
+\       'description': 'Refactor Haskell files with hlint.',
+\   },
+\   'stylish-haskell': {
+\       'function': 'ale#fixers#stylish_haskell#Fix',
+\       'suggested_filetypes': ['haskell'],
+\       'description': 'Refactor Haskell files with stylish-haskell.',
 \   },
 \   'refmt': {
 \       'function': 'ale#fixers#refmt#Fix',
@@ -205,6 +220,11 @@ let s:default_registry = {
 \       'suggested_filetypes': ['qml'],
 \       'description': 'Fix QML files with qmlfmt.',
 \   },
+\   'dartfmt': {
+\       'function': 'ale#fixers#dartfmt#Fix',
+\       'suggested_filetypes': ['dart'],
+\       'description': 'Fix Dart files with dartfmt.',
+\   },
 \}
 
 " Reset the function registry to the default entries.
@@ -232,32 +252,35 @@ endfunction
 " Add a function for fixing problems to the registry.
 " (name, func, filetypes, desc, aliases)
 function! ale#fix#registry#Add(name, func, filetypes, desc, ...) abort
-    if type(a:name) != type('')
+    " This command will throw from the sandbox.
+    let &l:equalprg=&l:equalprg
+
+    if type(a:name) isnot v:t_string
         throw '''name'' must be a String'
     endif
 
-    if type(a:func) != type('')
+    if type(a:func) isnot v:t_string
         throw '''func'' must be a String'
     endif
 
-    if type(a:filetypes) != type([])
+    if type(a:filetypes) isnot v:t_list
         throw '''filetypes'' must be a List'
     endif
 
     for l:type in a:filetypes
-        if type(l:type) != type('')
+        if type(l:type) isnot v:t_string
             throw 'Each entry of ''filetypes'' must be a String'
         endif
     endfor
 
-    if type(a:desc) != type('')
+    if type(a:desc) isnot v:t_string
         throw '''desc'' must be a String'
     endif
 
     let l:aliases = get(a:000, 0, [])
 
-    if type(l:aliases) != type([])
-    \|| !empty(filter(copy(l:aliases), 'type(v:val) != type('''')'))
+    if type(l:aliases) isnot v:t_list
+    \|| !empty(filter(copy(l:aliases), 'type(v:val) isnot v:t_string'))
         throw '''aliases'' must be a List of String values'
     endif
 
@@ -345,8 +368,7 @@ function! ale#fix#registry#CompleteFixers(ArgLead, CmdLine, CursorPos) abort
     return filter(ale#fix#registry#GetApplicableFixers(&filetype), 'v:val =~? a:ArgLead')
 endfunction
 
-" Suggest functions to use from the registry.
-function! ale#fix#registry#Suggest(filetype) abort
+function! ale#fix#registry#SuggestedFixers(filetype) abort
     let l:type_list = split(a:filetype, '\.')
     let l:filetype_fixer_list = []
 
@@ -371,6 +393,15 @@ function! ale#fix#registry#Suggest(filetype) abort
             \)
         endif
     endfor
+
+    return [l:filetype_fixer_list, l:generic_fixer_list]
+endfunction
+
+" Suggest functions to use from the registry.
+function! ale#fix#registry#Suggest(filetype) abort
+    let l:suggested = ale#fix#registry#SuggestedFixers(a:filetype)
+    let l:filetype_fixer_list = l:suggested[0]
+    let l:generic_fixer_list = l:suggested[1]
 
     let l:filetype_fixer_header = !empty(l:filetype_fixer_list)
     \   ? ['Try the following fixers appropriate for the filetype:', '']
